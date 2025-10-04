@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Image as ImageIcon, X } from 'lucide-react';
 import { Sport, SportImage } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { localStorageAPI } from '../../lib/localStorage';
 import ConfirmDialog from '../ConfirmDialog';
 
 interface ImagesTabProps {
@@ -20,49 +20,38 @@ export default function ImagesTab({ sport }: ImagesTabProps) {
     fetchImages();
   }, [sport]);
 
-  const fetchImages = async () => {
+  const fetchImages = () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('sport_images')
-      .select('*')
-      .eq('sport', sport)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setImages(data);
-    }
+    const allImages = localStorageAPI.getSportImages();
+    setImages(allImages.filter(image => image.sport === sport).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     setLoading(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('sport_images').insert({
+    const newImage: SportImage = {
+      id: crypto.randomUUID(),
       sport,
       image_url: imageUrl,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setImageUrl('');
-      setShowForm(false);
-      fetchImages();
-    }
+    localStorageAPI.addSportImage(newImage);
+
+    setImageUrl('');
+    setShowForm(false);
+    fetchImages();
   };
 
   const confirmDelete = (id: string) => {
     setConfirmDeleteId(id);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!confirmDeleteId) return;
-    const { error } = await supabase
-      .from('sport_images')
-      .delete()
-      .eq('id', confirmDeleteId);
-
-    if (!error) {
-      fetchImages();
-    }
+    localStorageAPI.deleteSportImage(confirmDeleteId);
+    fetchImages();
     setConfirmDeleteId(null);
   };
 

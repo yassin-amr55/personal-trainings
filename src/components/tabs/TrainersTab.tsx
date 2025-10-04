@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, User } from 'lucide-react';
 import { Sport, Trainer } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { localStorageAPI } from '../../lib/localStorage';
 
 interface TrainersTabProps {
   sport: Sport;
@@ -20,44 +20,33 @@ export default function TrainersTab({ sport }: TrainersTabProps) {
     fetchTrainers();
   }, [sport]);
 
-  const fetchTrainers = async () => {
-    const { data, error } = await supabase
-      .from('trainers')
-      .select('*')
-      .eq('sport', sport)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setTrainers(data);
-    }
+  const fetchTrainers = () => {
+    const allTrainers = localStorageAPI.getTrainers();
+    setTrainers(allTrainers.filter(trainer => trainer.sport === sport).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('trainers').insert({
+    const newTrainer: Trainer = {
+      id: crypto.randomUUID(),
       sport,
       name: formData.name,
       start_date: formData.start_date,
       end_date: formData.end_date || null,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setFormData({ name: '', start_date: '', end_date: '' });
-      setShowForm(false);
-      fetchTrainers();
-    }
+    localStorageAPI.addTrainer(newTrainer);
+
+    setFormData({ name: '', start_date: '', end_date: '' });
+    setShowForm(false);
+    fetchTrainers();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from('trainers')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      fetchTrainers();
-    }
+  const handleDelete = (id: string) => {
+    localStorageAPI.deleteTrainer(id);
+    fetchTrainers();
   };
 
   return (

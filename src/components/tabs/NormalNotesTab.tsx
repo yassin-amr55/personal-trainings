@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, FileText } from 'lucide-react';
 import { Sport, NormalNote } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { localStorageAPI } from '../../lib/localStorage';
 
 interface NormalNotesTabProps {
   sport: Sport;
@@ -16,42 +16,31 @@ export default function NormalNotesTab({ sport }: NormalNotesTabProps) {
     fetchNotes();
   }, [sport]);
 
-  const fetchNotes = async () => {
-    const { data, error } = await supabase
-      .from('normal_notes')
-      .select('*')
-      .eq('sport', sport)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setNotes(data);
-    }
+  const fetchNotes = () => {
+    const allNotes = localStorageAPI.getNormalNotes();
+    setNotes(allNotes.filter(note => note.sport === sport).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('normal_notes').insert({
+    const newNote: NormalNote = {
+      id: crypto.randomUUID(),
       sport,
       content,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setContent('');
-      setShowForm(false);
-      fetchNotes();
-    }
+    localStorageAPI.addNormalNote(newNote);
+
+    setContent('');
+    setShowForm(false);
+    fetchNotes();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from('normal_notes')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      fetchNotes();
-    }
+  const handleDelete = (id: string) => {
+    localStorageAPI.deleteNormalNote(id);
+    fetchNotes();
   };
 
   return (

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trophy } from 'lucide-react';
 import { Horse } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { localStorageAPI } from '../../lib/localStorage';
 
 export default function MyHorsesTab() {
   const [horses, setHorses] = useState<Horse[]>([]);
@@ -18,44 +18,34 @@ export default function MyHorsesTab() {
     fetchHorses();
   }, []);
 
-  const fetchHorses = async () => {
-    const { data, error } = await supabase
-      .from('horses')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setHorses(data);
-    }
+  const fetchHorses = () => {
+    const allHorses = localStorageAPI.getHorses();
+    setHorses(allHorses.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('horses').insert({
+    const newHorse: Horse = {
+      id: crypto.randomUUID(),
       name: formData.name,
       age: formData.age,
       gender: formData.gender,
       acquired_date: formData.acquired_date,
       image_url: formData.image_url || null,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setFormData({ name: '', age: '', gender: 'Male', acquired_date: '', image_url: '' });
-      setShowForm(false);
-      fetchHorses();
-    }
+    localStorageAPI.addHorse(newHorse);
+
+    setFormData({ name: '', age: '', gender: 'Male', acquired_date: '', image_url: '' });
+    setShowForm(false);
+    fetchHorses();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from('horses')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      fetchHorses();
-    }
+  const handleDelete = (id: string) => {
+    localStorageAPI.deleteHorse(id);
+    fetchHorses();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

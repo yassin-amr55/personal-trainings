@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Trophy, Medal, X } from 'lucide-react';
 import { Sport, Championship } from '../types';
-import { supabase } from '../lib/supabase';
+import { localStorageAPI } from '../lib/localStorage';
 import ConfirmDialog from './ConfirmDialog';
 
 interface ChampionshipTrackerProps {
@@ -31,17 +31,10 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
     fetchChampionships();
   }, [sport]);
 
-  const fetchChampionships = async () => {
+  const fetchChampionships = () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('championships')
-      .select('*')
-      .eq('sport', sport)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setChampionships(data);
-    }
+    const allChampionships = localStorageAPI.getChampionships();
+    setChampionships(allChampionships.filter(champ => champ.sport === sport).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
     setLoading(false);
   };
 
@@ -50,11 +43,12 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
     setShowForm(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedType) return;
 
-    const { error } = await supabase.from('championships').insert({
+    const newChampionship: Championship = {
+      id: crypto.randomUUID(),
       sport,
       type: selectedType,
       name: formData.name,
@@ -63,30 +57,25 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
       date: formData.date,
       penalties: formData.penalties,
       image_url: formData.image_url || null,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setFormData({ name: '', place: '', award: '', date: '', penalties: '', image_url: '' });
-      setShowForm(false);
-      setSelectedType(null);
-      fetchChampionships();
-    }
+    localStorageAPI.addChampionship(newChampionship);
+
+    setFormData({ name: '', place: '', award: '', date: '', penalties: '', image_url: '' });
+    setShowForm(false);
+    setSelectedType(null);
+    fetchChampionships();
   };
 
   const confirmDelete = (id: string) => {
     setConfirmDeleteId(id);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!confirmDeleteId) return;
-    const { error } = await supabase
-      .from('championships')
-      .delete()
-      .eq('id', confirmDeleteId);
-
-    if (!error) {
-      fetchChampionships();
-    }
+    localStorageAPI.deleteChampionship(confirmDeleteId);
+    fetchChampionships();
     setConfirmDeleteId(null);
   };
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Calendar, CheckCircle, XCircle } from 'lucide-react';
 import { Sport, TrainingDurationNote } from '../../types';
-import { supabase } from '../../lib/supabase';
+import { localStorageAPI } from '../../lib/localStorage';
 
 interface TrainingDurationTabProps {
   sport: Sport;
@@ -20,44 +20,33 @@ export default function TrainingDurationTab({ sport }: TrainingDurationTabProps)
     fetchNotes();
   }, [sport]);
 
-  const fetchNotes = async () => {
-    const { data, error } = await supabase
-      .from('training_duration_notes')
-      .select('*')
-      .eq('sport', sport)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setNotes(data);
-    }
+  const fetchNotes = () => {
+    const allNotes = localStorageAPI.getTrainingDurationNotes();
+    setNotes(allNotes.filter(note => note.sport === sport).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const { error } = await supabase.from('training_duration_notes').insert({
+    const newNote: TrainingDurationNote = {
+      id: crypto.randomUUID(),
       sport,
       start_date: formData.start_date,
       end_date: formData.is_continuing ? null : formData.end_date,
       is_continuing: formData.is_continuing,
-    });
+      created_at: new Date().toISOString(),
+    };
 
-    if (!error) {
-      setFormData({ start_date: '', end_date: '', is_continuing: false });
-      setShowForm(false);
-      fetchNotes();
-    }
+    localStorageAPI.addTrainingDurationNote(newNote);
+
+    setFormData({ start_date: '', end_date: '', is_continuing: false });
+    setShowForm(false);
+    fetchNotes();
   };
 
-  const handleDelete = async (id: string) => {
-    const { error } = await supabase
-      .from('training_duration_notes')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      fetchNotes();
-    }
+  const handleDelete = (id: string) => {
+    localStorageAPI.deleteTrainingDurationNote(id);
+    fetchNotes();
   };
 
   return (
