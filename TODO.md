@@ -1,0 +1,7 @@
+- [ ] Update src/types/index.ts: Add date and penalties to Championship interface
+- [ ] Update src/components/ChampionshipTracker.tsx: Add date and penalties to formData, form inputs, insert, display, fix duplicate display
+- [ ] Update src/components/tabs/NormalNotesTab.tsx: Add loading state
+- [ ] Update src/components/tabs/TrainersTab.tsx: Add loading state
+- [ ] Update src/components/tabs/ImagesTab.tsx: Add loading state
+- [ ] Update src/components/tabs/MyHorsesTab.tsx: Add loading state
+- [ ] Update src/components/tabs/TrainingDurationTab.tsx: Add loading state
