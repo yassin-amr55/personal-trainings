@@ -1,7 +1,0 @@
-- [x] Migrated all data storage from Supabase to localStorage
-- [x] Created src/lib/localStorage.ts with CRUD operations for all entities
-- [x] Updated all components to use localStorageAPI instead of Supabase
-- [x] Removed @supabase/supabase-js dependency
-- [x] Deleted src/lib/supabase.ts
-- [x] Championship interface already has date and penalties fields
-- [x] Removed async operations, no need for loading states

@@ -268,18 +268,15 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
                       key={championship.id}
                       className="bg-slate-800/50 backdrop-blur-sm rounded-xl overflow-hidden border border-white/10 hover:border-white/20 transition-all duration-300"
                     >
-                      {championship.image_url ? (
-                        <div className="aspect-video relative group cursor-pointer" onClick={() => setSelectedImage(championship.image_url)}>
-                          <img
-                            src={championship.image_url}
-                            alt={championship.name}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-white text-sm">Click to enlarge</span>
-                          </div>
-                        </div>
-                      ) : (
+{championship.image_url ? (
+  <div className="aspect-video relative group cursor-pointer" onClick={() => setSelectedImage(championship.image_url)}>
+    <img
+      src={championship.image_url}
+      alt={championship.name}
+      className="w-full h-full object-cover"
+    />
+  </div>
+) : (
                         <div className={`aspect-video bg-gradient-to-br ${getTypeColor(championship.type as ChampionshipType)} flex items-center justify-center`}>
                           <Trophy className="w-16 h-16 text-white" />
                         </div>
