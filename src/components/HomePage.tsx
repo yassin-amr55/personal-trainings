@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Sport } from '../types';
-import { Target, Anchor, Waves, Flame, Award } from 'lucide-react';
+import { Target, Anchor, Waves, Flame, Award, Download, Upload } from 'lucide-react';
+import { localStorageAPI } from '../lib/localStorage';
 
 interface HomePageProps {
   onSelectSport: (sport: Sport) => void;
@@ -14,8 +16,87 @@ const sports: { name: Sport; icon: typeof Target; gradient: string }[] = [
 ];
 
 export default function HomePage({ onSelectSport }: HomePageProps) {
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleExport = () => {
+    try {
+      const data = {
+        championships: localStorageAPI.getChampionships(),
+        normalNotes: localStorageAPI.getNormalNotes(),
+        trainers: localStorageAPI.getTrainers(),
+        trainingDurationNotes: localStorageAPI.getTrainingDurationNotes(),
+        sportImages: localStorageAPI.getSportImages(),
+        horses: localStorageAPI.getHorses(),
+        exportDate: new Date().toISOString(),
+      };
+
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sports-tracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setMessage({ text: 'Data exported successfully!', type: 'success' });
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error) {
+      setMessage({ text: 'Failed to export data', type: 'error' });
+      setTimeout(() => setMessage(null), 3000);
+    }
+  };
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+
+        // Validate data structure
+        if (!data.championships || !Array.isArray(data.championships)) {
+          throw new Error('Invalid backup file format');
+        }
+
+        // Import all data
+        if (data.championships) {
+          data.championships.forEach((item: any) => localStorageAPI.addChampionship(item));
+        }
+        if (data.normalNotes) {
+          data.normalNotes.forEach((item: any) => localStorageAPI.addNormalNote(item));
+        }
+        if (data.trainers) {
+          data.trainers.forEach((item: any) => localStorageAPI.addTrainer(item));
+        }
+        if (data.trainingDurationNotes) {
+          data.trainingDurationNotes.forEach((item: any) => localStorageAPI.addTrainingDurationNote(item));
+        }
+        if (data.sportImages) {
+          data.sportImages.forEach((item: any) => localStorageAPI.addSportImage(item));
+        }
+        if (data.horses) {
+          data.horses.forEach((item: any) => localStorageAPI.addHorse(item));
+        }
+
+        setMessage({ text: 'Data imported successfully!', type: 'success' });
+        setTimeout(() => setMessage(null), 3000);
+      } catch (error) {
+        setMessage({ text: 'Failed to import data. Invalid file format.', type: 'error' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 pb-32">
       <header className="text-center mb-12 animate-fade-in">
         <h1 className="text-5xl md:text-6xl font-bold text-white mb-4 tracking-tight">
           My Training Tracker
@@ -48,6 +129,38 @@ export default function HomePage({ onSelectSport }: HomePageProps) {
             </button>
           );
         })}
+      </div>
+
+      {/* Export/Import Section */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-white/10 p-4">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-4">
+          <button
+            onClick={handleExport}
+            className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg w-full sm:w-auto"
+          >
+            <Download className="w-5 h-5" />
+            <span>Export Data</span>
+          </button>
+
+          <label className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg cursor-pointer w-full sm:w-auto">
+            <Upload className="w-5 h-5" />
+            <span>Import Data</span>
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </label>
+        </div>
+
+        {message && (
+          <div className={`mt-3 text-center text-sm font-medium ${
+            message.type === 'success' ? 'text-green-400' : 'text-red-400'
+          }`}>
+            {message.text}
+          </div>
+        )}
       </div>
     </div>
   );

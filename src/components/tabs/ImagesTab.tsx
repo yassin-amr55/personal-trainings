@@ -15,6 +15,8 @@ export default function ImagesTab({ sport }: ImagesTabProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [processingImage, setProcessingImage] = useState(false);
 
   useEffect(() => {
     fetchImages();
@@ -59,14 +61,79 @@ export default function ImagesTab({ sport }: ImagesTabProps) {
     setConfirmDeleteId(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result as string);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          
+          if (compressedDataUrl.length > 1400000) {
+            reject(new Error('Image is too large even after compression. Please use a smaller image.'));
+          } else {
+            resolve(compressedDataUrl);
+          }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
       };
+      reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+    setProcessingImage(true);
+
+    try {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('Image file is too large. Please select an image smaller than 10MB.');
+      }
+
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please select a valid image file.');
+      }
+
+      const compressedImage = await compressImage(file);
+      setImageUrl(compressedImage);
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Failed to process image');
+      setImageUrl('');
+    } finally {
+      setProcessingImage(false);
     }
   };
 
@@ -91,13 +158,27 @@ export default function ImagesTab({ sport }: ImagesTabProps) {
               type="file"
               accept="image/*"
               onChange={handleFileChange}
-              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer hover:file:bg-blue-700"
+              disabled={processingImage}
+              className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer hover:file:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             />
+            {imageError && (
+              <p className="mt-2 text-sm text-red-400">{imageError}</p>
+            )}
+            {processingImage && (
+              <p className="mt-2 text-sm text-blue-400">Processing image...</p>
+            )}
           </div>
 
           {imageUrl && (
             <div className="relative">
               <img src={imageUrl} alt="Preview" className="w-full max-h-64 object-contain rounded-lg" />
+              <button
+                type="button"
+                onClick={() => setImageUrl('')}
+                className="absolute top-2 right-2 p-2 bg-red-600 hover:bg-red-700 rounded-full transition-colors"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
             </div>
           )}
 
@@ -114,6 +195,7 @@ export default function ImagesTab({ sport }: ImagesTabProps) {
               onClick={() => {
                 setShowForm(false);
                 setImageUrl('');
+                setImageError(null);
               }}
               className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-all"
             >

@@ -15,6 +15,7 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
   const [championships, setChampionships] = useState<Championship[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedType, setSelectedType] = useState<ChampionshipType | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     place: '',
@@ -26,6 +27,7 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchChampionships();
@@ -40,6 +42,24 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
 
   const handleTypeSelect = (type: ChampionshipType) => {
     setSelectedType(type);
+    setEditingId(null);
+    setFormData({ name: '', place: '', award: '', date: '', penalties: '', image_url: '' });
+    setImageError(null);
+    setShowForm(true);
+  };
+
+  const handleEdit = (championship: Championship) => {
+    setEditingId(championship.id);
+    setSelectedType(championship.type as ChampionshipType);
+    setFormData({
+      name: championship.name,
+      place: championship.place,
+      award: championship.award,
+      date: championship.date,
+      penalties: championship.penalties,
+      image_url: championship.image_url || '',
+    });
+    setImageError(null);
     setShowForm(true);
   };
 
@@ -47,24 +67,39 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
     e.preventDefault();
     if (!selectedType) return;
 
-    const newChampionship: Championship = {
-      id: crypto.randomUUID(),
-      sport,
-      type: selectedType,
-      name: formData.name,
-      place: formData.place,
-      award: formData.award,
-      date: formData.date,
-      penalties: formData.penalties,
-      image_url: formData.image_url || null,
-      created_at: new Date().toISOString(),
-    };
-
-    localStorageAPI.addChampionship(newChampionship);
+    if (editingId) {
+      // Update existing championship
+      localStorageAPI.updateChampionship(editingId, {
+        type: selectedType,
+        name: formData.name,
+        place: formData.place,
+        award: formData.award,
+        date: formData.date,
+        penalties: formData.penalties,
+        image_url: formData.image_url || null,
+      });
+      setEditingId(null);
+    } else {
+      // Create new championship
+      const newChampionship: Championship = {
+        id: crypto.randomUUID(),
+        sport,
+        type: selectedType,
+        name: formData.name,
+        place: formData.place,
+        award: formData.award,
+        date: formData.date,
+        penalties: formData.penalties,
+        image_url: formData.image_url || null,
+        created_at: new Date().toISOString(),
+      };
+      localStorageAPI.addChampionship(newChampionship);
+    }
 
     setFormData({ name: '', place: '', award: '', date: '', penalties: '', image_url: '' });
     setShowForm(false);
     setSelectedType(null);
+    setImageError(null);
     fetchChampionships();
   };
 
@@ -83,15 +118,94 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
     setConfirmDeleteId(null);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, image_url: reader.result as string });
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+
+          // Set max dimensions for mobile compatibility
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Compress to JPEG with quality 0.7 for better mobile performance
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          
+          // Check if compressed image is still too large (> 1MB base64)
+          if (compressedDataUrl.length > 1400000) {
+            reject(new Error('Image is too large even after compression. Please use a smaller image.'));
+          } else {
+            resolve(compressedDataUrl);
+          }
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target?.result as string;
       };
+      reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageError(null);
+    setLoading(true);
+
+    try {
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('Image file is too large. Please select an image smaller than 10MB.');
+      }
+
+      // Check file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please select a valid image file.');
+      }
+
+      const compressedImage = await compressImage(file);
+      setFormData({ ...formData, image_url: compressedImage });
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : 'Failed to process image');
+      setFormData({ ...formData, image_url: '' });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const getOrdinalSuffix = (num: string): string => {
+    if (!num || num === '') return 'None';
+    const n = parseInt(num);
+    if (isNaN(n)) return 'None';
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
   const getTypeColor = (type: ChampionshipType) => {
@@ -152,7 +266,9 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
 
           {showForm && selectedType && (
             <form onSubmit={handleSubmit} className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-white/10 space-y-4 animate-fade-in">
-              <h2 className="text-xl font-bold text-white">{selectedType} Championship</h2>
+              <h2 className="text-xl font-bold text-white">
+                {editingId ? 'Edit' : 'Add'} {selectedType} Championship
+              </h2>
 
               <div>
                 <label className="block text-slate-300 mb-2">Championship Name</label>
@@ -169,12 +285,12 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
               <div>
                 <label className="block text-slate-300 mb-2">Place Achieved</label>
                 <input
-                  type="text"
-                  required
+                  type="number"
+                  min="1"
                   value={formData.place}
                   onChange={(e) => setFormData({ ...formData, place: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="e.g., 1st, 2nd, 3rd"
+                  placeholder="Enter place number (e.g., 1, 2, 3)"
                 />
               </div>
 
@@ -182,11 +298,10 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
                 <label className="block text-slate-300 mb-2">Award Received</label>
                 <input
                   type="text"
-                  required
                   value={formData.award}
                   onChange={(e) => setFormData({ ...formData, award: e.target.value })}
                   className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
-                  placeholder="Enter award details"
+                  placeholder="Enter award details (optional)"
                 />
               </div>
 
@@ -218,28 +333,45 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
-                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer hover:file:bg-blue-700"
+                  disabled={loading}
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white file:cursor-pointer hover:file:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+                {imageError && (
+                  <p className="mt-2 text-sm text-red-400">{imageError}</p>
+                )}
+                {loading && (
+                  <p className="mt-2 text-sm text-blue-400">Processing image...</p>
+                )}
               </div>
 
               {formData.image_url && (
                 <div className="relative">
                   <img src={formData.image_url} alt="Preview" className="w-full max-h-64 object-contain rounded-lg" />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, image_url: '' })}
+                    className="absolute top-2 right-2 p-2 bg-red-600 hover:bg-red-700 rounded-full transition-colors"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
                 </div>
               )}
 
               <div className="flex space-x-3">
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all"
+                  disabled={loading}
+                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Save Championship
+                  {editingId ? 'Update' : 'Save'} Championship
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
                     setSelectedType(null);
+                    setEditingId(null);
+                    setImageError(null);
                     setFormData({ name: '', place: '', award: '', date: '', penalties: '', image_url: '' });
                   }}
                   className="px-6 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-all"
@@ -297,10 +429,10 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
 
                         <div className="space-y-1 text-sm">
                           <p className="text-slate-300">
-                            Place: <span className="font-medium text-white">{championship.place}</span>
+                            Place: <span className="font-medium text-white">{getOrdinalSuffix(championship.place)}</span>
                           </p>
                           <p className="text-slate-300">
-                            Award: <span className="font-medium text-white">{championship.award}</span>
+                            Award: <span className="font-medium text-white">{championship.award || 'None'}</span>
                           </p>
                           <p className="text-slate-300">
                             Date: <span className="font-medium text-white">{new Date(championship.date).toLocaleDateString()}</span>
@@ -310,12 +442,20 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
                           </p>
                         </div>
 
-                        <button
-                          onClick={() => confirmDelete(championship.id)}
-                          className="w-full mt-4 px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex space-x-2 mt-4">
+                          <button
+                            onClick={() => handleEdit(championship)}
+                            className="flex-1 px-4 py-2 text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 rounded-lg transition-all"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => confirmDelete(championship.id)}
+                            className="flex-1 px-4 py-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-all"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -330,6 +470,26 @@ export default function ChampionshipTracker({ sport, onBack }: ChampionshipTrack
               onConfirm={handleDelete}
               onCancel={cancelDelete}
             />
+          )}
+
+          {selectedImage && (
+            <div 
+              className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+              onClick={() => setSelectedImage(null)}
+            >
+              <button
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+              <img 
+                src={selectedImage} 
+                alt="Championship award" 
+                className="max-w-full max-h-full object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           )}
         </div>
       </div>
